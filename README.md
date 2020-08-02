@@ -1,6 +1,6 @@
-# litescene.js
+# onecore
 
-Litescene is a scene graph library for WebGL with a component based hierarchical node system.
+OneCore (formerly known as LiteScene) is a scene graph library for WebGL with a component based hierarchical node system.
 It comes with a realistic rendering pipeline and some interesting components to make it easier to build and share scenes.
 
  * Component based node system
@@ -16,10 +16,10 @@ It comes with a realistic rendering pipeline and some interesting components to 
 ![litescene-screenshot.png](litescene-screenshot.png "LiteScene")
 
 
-### WebGLStudio ###
+### OnEdit ###
 
-Litescene has been created to work together with [WebGLStudio](https://webglstudio.org), an open source online 3D editor.
-From WebGLStudio you can export the JSON file containing all the info and use it in your LiteScene.
+OneCore has been created to work together with [WebGLStudio](https://webglstudio.org), an open source online 3D editor.
+From OnEdit you can export the JSON file containing all the info and use it in your OneCore.
 
 ### Usage ###
 
@@ -27,12 +27,12 @@ Include the library and dependencies
 ```html
 <script src="external/gl-matrix-min.js"></script>
 <script src="external/litegl.min.js"></script>
-<script src="js/litescene.js"></script>
+<script src="js/onecore.js"></script>
 ```
 
 Create the context
 ```js
-var player = new LS.Player({
+var player = new ONE.Player({
 	width:800, height:600,
 	resources: "resources/",
 	shaders: "data/shaders.xml"
