@@ -5,7 +5,7 @@
 
 (function(global){
 
-var GL = global.GL = {};
+var GL = global.GL = global.LiteGL = {};
 
 if(typeof(glMatrix) == "undefined")
 	throw("litegl.js requires gl-matrix to work. It must be included before litegl.");
@@ -231,51 +231,25 @@ global.isPowerOfTwo = GL.isPowerOfTwo = function isPowerOfTwo(v)
 }
 
 /**
-* Tells if one number is power of two (used for textures)
-* @method isPowerOfTwo
+* Tells you the closest POT size (it rounds, so 257 will give 256, while 511 will give 512)
+* @method nearestPowerOfTwo
 * @param {v} number
-* @return {boolean}
+* @return {number}
 */
 global.nearestPowerOfTwo = GL.nearestPowerOfTwo = function nearestPowerOfTwo(v)
 {
 	return Math.pow(2, Math.round( Math.log( v ) / Math.log(2) ) )
 }
 
-
 /**
-* converts from polar to cartesian
-* @method polarToCartesian
-* @param {vec3} out
-* @param {number} azimuth orientation from 0 to 2PI
-* @param {number} inclianation from -PI to PI
-* @param {number} radius
-* @return {vec3} returns out
+* Tells you the closest POT size (it ceils, so 256 will giev 256, but 257 will give 512)
+* @method nextPowerOfTwo
+* @param {v} number
+* @return {number}
 */
-global.polarToCartesian = function( out, azimuth, inclination, radius )
+global.nextPowerOfTwo = GL.nextPowerOfTwo = function nextPowerOfTwo(v)
 {
-	out = out || vec3.create();
-	out[0] = radius * Math.sin(inclination) * Math.cos(azimuth);
-	out[1] = radius * Math.cos(inclination);
-	out[2] = radius * Math.sin(inclination) * Math.sin(azimuth);
-	return out;
-}
-
-/**
-* converts from cartesian to polar
-* @method cartesianToPolar
-* @param {vec3} out
-* @param {number} x
-* @param {number} y
-* @param {number} z
-* @return {vec3} returns [azimuth,inclination,radius]
-*/
-global.cartesianToPolar = function( out, x,y,z )
-{
-	out = out || vec3.create();
-	out[2] = Math.sqrt(x*x+y*y+z*z);
-	out[0] = Math.atan2(x,z);
-	out[1] = Math.acos(z/out[2]);
-	return out;
+	return Math.pow(2, Math.ceil( Math.log( v ) / Math.log(2) ) )
 }
 
 //Global Scope
@@ -542,7 +516,8 @@ global.extendClass = GL.extendClass = function extendClass( target, origin ) {
 global.HttpRequest = GL.request = function HttpRequest( url, params, callback, error, options )
 {
 	var async = true;
-	if(options && options.async !== undefined)
+	options = options || {};
+	if(options.async !== undefined)
 		async = options.async;
 
 	if(params)
@@ -557,6 +532,7 @@ global.HttpRequest = GL.request = function HttpRequest( url, params, callback, e
 
 	var xhr = new XMLHttpRequest();
 	xhr.open('GET', url, async);
+	xhr.responseType = options.responseType || "text";
 	xhr.onload = function(e)
 	{
 		var response = this.response;
@@ -869,8 +845,44 @@ global.hexColorToRGBA = (function() {
 	color[1] = parseInt(result[2], 16) / 255;
 	color[2] = parseInt(result[3], 16) / 255;
 	return color;
-	}
-})();
+}})();
+
+global.toHalfFloat = (function() {
+
+  var floatView = new Float32Array(1);
+  var int32View = new Int32Array(floatView.buffer);
+
+  return function toHalfFloat( fval ) {
+    floatView[0] = fval;
+    var fbits = int32View[0];
+    var sign  = (fbits >> 16) & 0x8000;          // sign only
+    var val   = ( fbits & 0x7fffffff ) + 0x1000; // rounded value
+
+    if( val >= 0x47800000 ) {             // might be or become NaN/Inf
+      if( ( fbits & 0x7fffffff ) >= 0x47800000 ) {
+                                          // is or must become NaN/Inf
+        if( val < 0x7f800000 ) {          // was value but too large
+          return sign | 0x7c00;           // make it +/-Inf
+        }
+        return sign | 0x7c00 |            // remains +/-Inf or NaN
+            ( fbits & 0x007fffff ) >> 13; // keep NaN (and Inf) bits
+      }
+      return sign | 0x7bff;               // unrounded not quite Inf
+    }
+    if( val >= 0x38800000 ) {             // remains normalized value
+      return sign | val - 0x38000000 >> 13; // exp - 127 + 15
+    }
+    if( val < 0x33000000 )  {             // too small for subnormal
+      return sign;                        // becomes +/-0
+    }
+    val = ( fbits & 0x7fffffff ) >> 23;   // tmp exp for subnormal calc
+    return sign | ( ( fbits & 0x7fffff | 0x800000 ) // add subnormal bit
+         + ( 0x800000 >>> val - 102 )     // round depending on cut off
+         >> 126 - val );                  // div by 2^(1-(exp-127+15)) and >> 13 | exp=0
+}}());
+
+
+
 
 /**
  * @fileoverview dds - Utilities for loading DDS texture files
@@ -1502,10 +1514,13 @@ if(typeof(glMatrix) == "undefined")
 	throw("You must include glMatrix on your project");
 
 Math.clamp = function(v,a,b) { return (a > v ? a : (b < v ? b : v)); }
+Math.lerp =  function(a,b,f) { return a * (1 - f) + b * f; }
+Math.lerp01 =  function(a,b,f) { return Math.clamp(a * (1 - f) + b * f,0,1); }
+Math.iLerp =  function(a,b,v) { return (v - a) / (b - a); }
+Math.remap =  function(v,min,max,min2,max2) { return Math.lerp(min2,max2, Math.iLerp(min,max,v)); }
 
 var V3 = vec3.create;
 var M4 = vec3.create;
-
 
 vec3.ZERO = vec3.fromValues(0,0,0);
 vec3.FRONT = vec3.fromValues(0,0,-1);
@@ -1653,7 +1668,32 @@ vec3.random = function(vec, scale)
 	return vec;
 }
 
-//converts a polar coordinate (radius, lat, long) to (x,y,z)
+/**
+* converts from cartesian to polar
+* @method cartesianToPolar
+* @param {vec3} out
+* @param {vec3} v
+* @return {vec3} returns [radius,inclination,azimuth]
+*/
+vec3.cartesianToPolar = function( out, v )
+{
+	out = out || vec3.create();
+	var x = v[0];
+	var y = v[1];
+	var z = v[2];
+	out[0] = Math.sqrt(x*x+y*y+z*z); //radius
+	out[1] = Math.asin(y/out[0]); //inclination
+	out[2] = Math.atan2(x,z); //azimuth
+	return out;
+}
+
+/**
+* converts from polar to cartesian
+* @method polarToCartesian
+* @param {vec3} out
+* @param {vec3} v [r,lat,long] or [radius,inclination,azimuth]
+* @return {vec3} returns out
+*/
 vec3.polarToCartesian = function(out, v)
 {
 	var r = v[0];
@@ -1665,6 +1705,14 @@ vec3.polarToCartesian = function(out, v)
 	return out;
 }
 
+/**
+* reflects a vector over a normal
+* @method reflect
+* @param {vec3} out
+* @param {vec3} v
+* @param {vec3} n
+* @return {vec3} reflected vector
+*/
 vec3.reflect = function(out, v, n)
 {
 	var x = v[0]; var y = v[1]; var z = v[2];
@@ -2674,7 +2722,7 @@ Mesh.prototype.addBuffers = function( vertexbuffers, indexbuffers, stream_type )
 			var data = indexbuffers[i];
 			if(!data) continue;
 
-			if( data.constructor == GL.Buffer )
+			if( data.constructor == GL.Buffer || data.data )
 			{
 				data = data.data;
 			}
@@ -4093,6 +4141,8 @@ Mesh.mergeMeshes = function( meshes, options )
 	var vertex_offsets = [];
 	var current_vertex_offset = 0;
 	var groups = [];
+	var bones = [];
+	var bones_by_index = {};
 
 	//vertex buffers
 	//compute size
@@ -4129,6 +4179,31 @@ Mesh.mergeMeshes = function( meshes, options )
 			material: ""
 		};
 
+		//add bones
+		if(mesh.bones)
+		{
+			var prev_bones_by_index = {};
+			for(var j = 0; j < mesh.bones.length; ++j)
+			{
+				var b = mesh.bones[j];
+				if(!bones_by_index[b[0]])
+				{
+					bones_by_index[b[0]] = bones.length;
+					bones.push(b);
+				}
+				prev_bones_by_index[j] = bones_by_index[b[0]];
+			}
+
+			//remap bones
+			var bones_buffer = mesh.vertexBuffers["bone_indices"].data;
+			for(var j = 0; j < bones_buffer.length; j+=1)
+			{
+				bones_buffer[j] = prev_bones_by_index[ bones_buffer[j] ];
+			}
+		}
+		else if(bones.length)
+			throw("cannot merge meshes, one contains bones, the other doesnt");
+
 		groups.push( group );
 	}
 
@@ -4151,7 +4226,8 @@ Mesh.mergeMeshes = function( meshes, options )
 
 	for(var j in index_buffers)
 	{
-		index_buffers[j] = new Uint32Array( index_buffers[j] );
+		var datatype = current_vertex_offset < 256*256 ? Uint16Array : Uint32Array;
+		index_buffers[j] = new datatype( index_buffers[j] );
 		offsets[j] = 0;
 	}
 
@@ -4217,12 +4293,16 @@ Mesh.mergeMeshes = function( meshes, options )
 
 	function apply_offset( array, start, length, offset )
 	{
+		if(!offset)
+			return;
 		var l = start + length;
 		for(var i = start; i < l; ++i)
 			array[i] += offset;
 	}
 
 	var extra = { info: { groups: groups } };
+	if(bones.length)
+		extra.bones = bones;
 
 	//return
 	if( typeof(gl) != "undefined" || options.only_data )
@@ -5744,6 +5824,14 @@ Texture.prototype.computeInternalFormat = function()
 				console.warn("webgl 1 does not use HALF_FLOAT, converting to HALF_FLOAT_OES")
 				this.type = GL.HALF_FLOAT_OES;
 			}
+			/*
+			else if( this.type == GL.FLOAT )
+			{
+				//if(gl.extensions.WEBGL_color_buffer_float)
+				//	this.internalFormat = this.format == GL.RGB ? gl.extensions.WEBGL_color_buffer_float.RGB32F_EXT : gl.extensions.WEBGL_color_buffer_float.RGBA32F_EXT;
+				//this.internalFormat = this.format == GL.RGB ? GL.RGB32F : GL.RGBA32F;
+			}
+			*/
 		}
 	}
 }
@@ -5864,17 +5952,43 @@ Texture.setUploadOptions = function(options, gl)
 {
 	gl = gl || global.gl;
 
-	if(options) //options that are not stored in the texture should be passed again to avoid reusing unknown state
+	//FIREFOX throws a warning because this cannot be used with arraybuffers as you are in charge or applying it manually...
+	if(!Texture.disable_deprecated)
 	{
-		gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, !!(options.premultiply_alpha) );
-		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, !(options.no_flip) );
+		if(options) //options that are not stored in the texture should be passed again to avoid reusing unknown state
+		{
+			gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, !!(options.premultiply_alpha) );
+			gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, !(options.no_flip) );
+		}
+		else
+		{
+			gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false );
+			gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true );
+		}
 	}
-	else
-	{
-		gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false );
-		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true );
-	}
+
 	gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+}
+
+//flips image data in Y in place
+Texture.flipYData = function( data, width, height, numchannels )
+{
+	var temp = new data.constructor( width * numchannels );
+	var pos = 0;
+	var lastpos = width * (height-1) * numchannels;
+	var l = Math.floor(height*0.5); //middle
+	for(var i = 0; i < l; ++i)
+	{
+		var row = data.subarray(pos, pos + width*numchannels);
+		var row2 = data.subarray(lastpos, lastpos + width*numchannels);
+		temp.set( row );
+		row.set( row2 );
+		row2.set( temp );
+		pos += width * numchannels;
+		lastpos -= width * numchannels;
+		if(pos > lastpos)
+			break;
+	}
 }
 
 /**
@@ -5893,11 +6007,22 @@ Texture.prototype.uploadImage = function( image, options )
 	Texture.setUploadOptions(options, gl);
 
 	try {
-		gl.texImage2D( gl.TEXTURE_2D, 0, this.format, this.format, this.type, image );
-		this.width = image.videoWidth || image.width;
-		this.height = image.videoHeight || image.height;
+		if(options && options.subimage) //upload partially
+		{
+			if(gl.webgl_version == 1)
+				gl.texSubImage2D( gl.TEXTURE_2D, 0, 0,0, this.format, this.type, image );
+			else
+				gl.texSubImage2D( gl.TEXTURE_2D, 0, 0,0,image.videoWidth || image.width, image.videoHeight || image.height, this.format, this.type, image );
+		}
+		else
+		{
+			gl.texImage2D( gl.TEXTURE_2D, 0, this.format, this.format, this.type, image );
+			this.width = image.videoWidth || image.width;
+			this.height = image.videoHeight || image.height;
+		}
 		this.data = image;
 	} catch (e) {
+		console.error(e);
 		if (location.protocol == 'file:') {
 			throw 'image not loaded for security reasons (serve this page over "http://" instead)';
 		} else {
@@ -7523,10 +7648,8 @@ Texture.blend = function( a, b, factor, out )
 
 Texture.cubemapToTexture2D = function( cubemap_texture, size, target_texture, keep_type, yaw )
 {
-	if(!cubemap_texture || cubemap_texture.texture_type != gl.TEXTURE_CUBE_MAP) {
+	if(!cubemap_texture || cubemap_texture.texture_type != gl.TEXTURE_CUBE_MAP)
 		throw("No cubemap in convert");
-		return null;
-	}
 
 	size = size || cubemap_texture.width;
 	var type = keep_type ? cubemap_texture.type : gl.UNSIGNED_BYTE;
@@ -7804,7 +7927,8 @@ FBO.prototype.update = function( skip_disable )
 
 	var w = -1,
 		h = -1,
-		type = null;
+		type = null,
+		format = null;
 
 	var color_textures = this.color_textures;
 	var depth_texture = this.depth_texture;
@@ -7824,8 +7948,11 @@ FBO.prototype.update = function( skip_disable )
 				h = t.height;
 			else if(h != t.height)
 				throw("Cannot bind textures with different dimensions");
-			if(type == null) //first one defines the type
+			if(type == null) //first one defines the type: UNSIGNED_BYTE, etc
+			{
 				type = t.type;
+				format = t.format;
+			}
 			else if (type != t.type)
 				throw("Cannot bind textures to a FBO with different pixel formats");
 			if (t.texture_type != gl.TEXTURE_2D)
@@ -7957,7 +8084,11 @@ FBO.prototype.update = function( skip_disable )
 	//check completion
 	var complete = gl.checkFramebufferStatus( target );
 	if(complete !== gl.FRAMEBUFFER_COMPLETE) //36054: GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT
+	{
+		if( format == GL.RGB && (type == GL.FLOAT || type == GL.HALF_FLOAT_OES))
+			console.error("Tip: Firefox does not support RGB channel float/half_float textures, you must use RGBA");
 		throw("FBO not complete: " + complete);
+	}
 
 	//restore state
 	gl.bindTexture(gl.TEXTURE_2D, null);
@@ -8151,11 +8282,9 @@ global.Shader = GL.Shader = function Shader( vertexSource, fragmentSource, macro
 
 	gl.attachShader( this.program, vs, gl );
 	gl.attachShader( this.program, fs, gl );
-	gl.linkProgram(this.program);
-	if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-		throw 'link error: ' + gl.getProgramInfoLog(this.program);
-	}
+	gl.linkProgram( this.program );
 
+	//store shaders separated
 	this.vs_shader = vs;
 	this.fs_shader = fs;
 
@@ -8164,9 +8293,13 @@ global.Shader = GL.Shader = function Shader( vertexSource, fragmentSource, macro
 	this.uniformInfo = {};
 	this.samplers = {};
 
-	//extract info about the shader to speed up future processes
-	this.extractShaderInfo();
+	if( !Shader.use_async )
+		this.checkLink();
+	else
+		this._first_use = true;
 }
+
+Shader.use_async = true; //https://toji.github.io/shader-perf/
 
 Shader.expandMacros = function(macros)
 {
@@ -8204,9 +8337,6 @@ Shader.compileSource = function( type, source, gl, shader )
 	shader = shader || gl.createShader(type);
 	gl.shaderSource(shader, source);
 	gl.compileShader(shader);
-	if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-		throw (type == gl.VERTEX_SHADER ? "Vertex" : "Fragment") + ' shader compile error: ' + gl.getShaderInfoLog(shader);
-	}
 	return shader;
 }
 
@@ -8260,9 +8390,6 @@ Shader.prototype.updateShader = function( vertexSource, fragmentSource, macros )
 	gl.attachShader( this.program, vs, gl );
 	gl.attachShader( this.program, fs, gl );
 	gl.linkProgram( this.program );
-	if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-		throw 'link error: ' + gl.getProgramInfoLog( this.program );
-	}
 
 	//store shaders separated
 	this.vs_shader = vs;
@@ -8273,8 +8400,10 @@ Shader.prototype.updateShader = function( vertexSource, fragmentSource, macros )
 	this.uniformInfo = {};
 	this.samplers = {};
 
-	//extract info about the shader to speed up future processes
-	this.extractShaderInfo();
+	if( !Shader.use_async )
+		this.checkLink();
+	else
+		this._first_use = true;
 }
 
 /**
@@ -8480,6 +8609,23 @@ Shader.fromURL = function( vs_path, fs_path, on_complete )
 	return shader;
 }
 
+//check if shader works
+Shader.prototype.checkLink = function()
+{
+	this._first_use = false;
+
+	if (!gl.getShaderParameter(this.vs_shader, gl.COMPILE_STATUS)) {
+		throw "Vertex shader compile error: " + gl.getShaderInfoLog(this.vs_shader);
+	}
+	if (!gl.getShaderParameter(this.fs_shader, gl.COMPILE_STATUS)) {
+		throw "Fragment shader compile error: " + gl.getShaderInfoLog(this.fs_shader);
+	}
+	if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
+		throw 'link error: ' + gl.getProgramInfoLog( this.program );
+	}
+	this.extractShaderInfo();
+}
+
 /**
 * enables the shader (calls useProgram)
 * @method bind
@@ -8487,6 +8633,13 @@ Shader.fromURL = function( vs_path, fs_path, on_complete )
 Shader.prototype.bind = function()
 {
 	var gl = this.gl;
+
+	if(Shader.use_async && this._first_use )
+	{
+		this.checkLink();
+		this._first_use = false;
+	}
+
 	gl.useProgram( this.program );
 	gl._current_shader = this;
 }
@@ -8514,6 +8667,8 @@ Shader._temp_uniform = new Float32Array(16);
 
 Shader.prototype.uniforms = function(uniforms) {
 	var gl = this.gl;
+	if(this._first_use)
+		this.checkLink();
 	gl.useProgram(this.program);
 	gl._current_shader = this;
 
@@ -8532,6 +8687,8 @@ Shader.prototype.uniforms = function(uniforms) {
 
 Shader.prototype.uniformsArray = function(array) {
 	var gl = this.gl;
+	if(this._first_use)
+		this.checkLink();
 	gl.useProgram( this.program );
 	gl._current_shader = this;
 
@@ -8587,6 +8744,9 @@ Shader.prototype._setUniform = (function(){
 
 	return (function(name, value)
 	{
+		if(this._first_use)
+			this.checkLink();
+
 		var info = this.uniformInfo[ name ];
 		if (!info)
 			return;
@@ -9544,6 +9704,7 @@ Shader.FXAA_FUNC = "\n\
 	#define FXAA_SPAN_MAX     8.0\n\
 	\n\
 	/* from mitsuhiko/webgl-meincraft based on the code on geeks3d.com */\n\
+	/* fragCoord MUST BE IN PIXELS */\n\
 	vec4 applyFXAA(sampler2D tex, vec2 fragCoord)\n\
 	{\n\
 		vec4 color = vec4(0.0);\n\
@@ -9576,7 +9737,7 @@ Shader.FXAA_FUNC = "\n\
 		vec3 rgbB = rgbA * 0.5 + 0.25 * (texture2D(tex, fragCoord * u_iViewportSize + dir * -0.5).xyz + \n\
 			texture2D(tex, fragCoord * u_iViewportSize + dir * 0.5).xyz);\n\
 		\n\
-		return vec4(rgbA,1.0);\n\
+		//return vec4(rgbA,1.0);\n\
 		float lumaB = dot(rgbB, luma);\n\
 		if ((lumaB < lumaMin) || (lumaB > lumaMax))\n\
 			color = vec4(rgbA, 1.0);\n\
@@ -9736,6 +9897,12 @@ GL.create = function(options) {
 
 	//get some common extensions for webgl 1
 	gl.extensions = {};
+
+	var available_extensions = gl.getSupportedExtensions();
+	for(var i = 0; i < available_extensions.length; ++i)
+		gl.extensions[ available_extensions[i] ] = gl.getExtension( available_extensions[i] );
+
+	/*
 	gl.extensions["OES_standard_derivatives"] = gl.derivatives_supported = gl.getExtension('OES_standard_derivatives') || false;
 	gl.extensions["WEBGL_depth_texture"] = gl.getExtension("WEBGL_depth_texture") || gl.getExtension("WEBKIT_WEBGL_depth_texture") || gl.getExtension("MOZ_WEBGL_depth_texture");
 	gl.extensions["OES_element_index_uint"] = gl.getExtension("OES_element_index_uint");
@@ -9758,6 +9925,7 @@ GL.create = function(options) {
 	gl.extensions["OES_texture_half_float_linear"] = gl.getExtension("OES_texture_half_float_linear");
 	if(gl.extensions["OES_texture_half_float_linear"])
 		gl.extensions["OES_texture_half_float"] = gl.getExtension("OES_texture_half_float");
+	*/
 
 	if( gl.webgl_version == 1 )
 		gl.HIGH_PRECISION_FORMAT = gl.extensions["OES_texture_half_float"] ? GL.HALF_FLOAT_OES : (gl.extensions["OES_texture_float"] ? GL.FLOAT : GL.UNSIGNED_BYTE); //because Firefox dont support half float
@@ -11116,6 +11284,8 @@ global.CLIP_OVERLAP = GL.CLIP_OVERLAP = 2;
 
 global.geo = {
 
+	last_t: -1,
+
 	/**
 	* Returns a float4 containing the info about a plane with normal N and that passes through point P
 	* @method createPlane
@@ -11246,8 +11416,9 @@ global.geo = {
 		var numer = D - vec3.dot(N, start);
 		var denom = vec3.dot(N, direction);
 		if( Math.abs(denom) < EPSILON) return false;
-		var t = (numer / denom);
-		if(t < 0.0) return false; //behind the ray
+		var t = this.last_t = (numer / denom);
+		if(t < 0.0)
+			return false; //behind the ray
 		if(result)
 			vec3.add( result,  start, vec3.scale( result, direction, t) );
 
@@ -11274,7 +11445,7 @@ global.geo = {
 			var denom = vec3.dot(N, direction);
 			if( Math.abs(denom) < EPSILON)
 				return false; //parallel 
-			var t = (numer / denom);
+			var t = this.last_t = (numer / denom);
 			if(t < 0.0)
 				return false; //behind the start
 			if(t > 1.0)
@@ -11326,10 +11497,51 @@ global.geo = {
 				var t = r1 < r2 ? r1 : r2;
 				if(max_dist !== undefined && t > max_dist)
 					return false;
+				this.last_t = t;
 				vec3.add(result, start, vec3.scale( result, direction, t ) );
 			}
 			return true;//real roots
 		};
+	})(),
+
+	//NOT TESTED!
+	hitTestTriangle: (function(){
+		var ab = vec3.create();
+		var ac = vec3.create();
+		var normal = vec3.create();
+		var temp = vec3.create();
+		var hit = vec3.create();
+		
+		return function(origin, direction, a, b, c, result) {
+			vec3.subtract(ab, b,a );
+			vec3.subtract(ac, c,a );
+			vec3.cross( normal, ab,ac);
+			vec3.normalize( normal, normal );
+			var t = vec3.dot(normal, vec3.subtract( temp, a,origin)) / vec3.dot(normal,direction);
+
+			if (t > 0) {
+				vec3.add( hit, origin, vec3.scale(temp, direction,t ));
+				var toHit = vec3.subtract( temp, temp, a);
+				var dot00 = vec3.dot(ac,ac);
+				var dot01 = vec3.dot(ac,ab);
+				var dot02 = vec3.dot(ac,toHit);
+				var dot11 = vec3.dot(ab,ab);
+				var dot12 = vec3.dot(ab,toHit);
+				var divide = dot00 * dot11 - dot01 * dot01;
+				var u = (dot11 * dot02 - dot01 * dot12) / divide;
+				var v = (dot00 * dot12 - dot01 * dot02) / divide;
+				if (u >= 0 && v >= 0 && u + v <= 1)
+				{
+					this.last_t = t;
+					//return new HitTest(t, hit, normal);
+					if(result)
+						vec3.add(result, origin, vec3.scale( temp, direction, t ) );
+					return true;
+				}
+			  }
+
+			  return false;
+			};
 	})(),
 
 	/**
@@ -11415,6 +11627,7 @@ global.geo = {
 			return k+dd - 2*md+t*(2*(mn - nd)+t*nn) <= 0.0;
 		}
 		// Segment intersects cylinder between the endcaps; t is correct
+		this.last_t = t;
 		if(result)
 			vec3.add(result, sa, vec3.scale(result, n,t) );
 		return true;
@@ -11471,6 +11684,7 @@ global.geo = {
 
 		/* Ray origin inside bounding box */
 		if(inside)	{
+			this.last_t = 0;
 			if(result)
 				vec3.copy(result, start);
 			return true;
@@ -11493,6 +11707,7 @@ global.geo = {
 		/* Check final candidate actually inside box */
 		if (maxT[whichPlane] < 0.) return false;
 		if (maxT[whichPlane] > max_dist) return false; //NOT TESTED
+		this.last_t = maxT[whichPlane];
 
 		for (i = 0; i < 3; ++i)
 			if (whichPlane != i) {
@@ -12850,6 +13065,7 @@ global.Ray = GL.Ray = function Ray( origin, direction )
 	this.origin = vec3.create();
 	this.direction = vec3.create();
 	this.collision_point = vec3.create();
+	this.t = -1;
 
 	if(origin)
 		this.origin.set( origin );
@@ -12859,13 +13075,26 @@ global.Ray = GL.Ray = function Ray( origin, direction )
 
 Ray.prototype.testPlane = function( P, N )
 {
-	return geo.testRayPlane( this.origin, this.direction, P, N, this.collision_point );
+	var r = geo.testRayPlane( this.origin, this.direction, P, N, this.collision_point );
+	this.t = geo.last_t;
+	return r;
 }
 
 Ray.prototype.testSphere = function( center, radius, max_dist )
 {
-	return geo.testRaySphere( this.origin, this.direction, center, radius, this.collision_point, max_dist );
+	var r = geo.testRaySphere( this.origin, this.direction, center, radius, this.collision_point, max_dist );
+	this.t = geo.last_t;
+	return r;
 }
+
+//box must be in BBox format, check BBox class
+Ray.prototype.testBBox = function( bbox, max_dist, model, in_local )
+{
+	var r = geo.testRayBBox( this.origin, this.direction, bbox, model, this.collision_point, max_dist, in_local );
+	this.t = geo.last_t;
+	return r;
+}
+
 
 // ### new GL.Raytracer()
 // 
@@ -13835,14 +14064,15 @@ Mesh.binary_file_formats["wbin"] = true;
 
 Mesh.parsers["wbin"] = Mesh.fromBinary = function( data_array, options )
 {
-	if(!global.WBin)
-		throw("To use binary meshes you need to install WBin.js from https://github.com/jagenjo/litescene.js/blob/master/src/utils/wbin.js ");
-
 	options = options || {};
 
 	var o = null;
 	if( data_array.constructor == ArrayBuffer )
+	{
+		if(!global.WBin)
+			throw("To use binary meshes you need to install WBin.js from https://github.com/jagenjo/litescene.js/blob/master/src/utils/wbin.js ");
 		o = WBin.load( data_array, true );
+	}
 	else
 		o = data_array;
 
@@ -14148,3 +14378,7 @@ Mesh.decompressors["bounding_compressed"] = function(o)
 
 //footer.js
 })( typeof(window) != "undefined" ? window : (typeof(self) != "undefined" ? self : global ) );
+
+//end of litegl.js
+
+

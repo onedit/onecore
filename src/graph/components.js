@@ -308,7 +308,7 @@ if(typeof(LiteGraph) != "undefined")
 
 	LGraphComponent.prototype.onGetInputs = function()
 	{ 
-		var inputs = [["Node",0],["Component",0],null];
+		var inputs = [["Node",0],["Component",0],["Trigger",LiteGraph.ACTION],null];
 
 		this.getComponentProperties("input", inputs);
 

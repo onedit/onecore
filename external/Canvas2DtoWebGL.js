@@ -331,6 +331,7 @@ function enableWebGLCanvas( canvas, options )
 	var tmp_vec4b = vec4.create();
 	var tmp_vec2b = vec2.create();
 	ctx._stack = [];
+	ctx._stack_size = 0;
 	var global_angle = 0;
 	var viewport = ctx.viewport_data.subarray(2,4);
 
@@ -358,22 +359,70 @@ function enableWebGLCanvas( canvas, options )
 	ctx.resetTransform = function()
 	{
 		//reset transform
-		gl._stack.length = 0;
+		gl._stack_size = 0;
 		this._matrix.set([1,0,0, 0,1,0, 0,0,1]);
 		global_angle = 0;
 	}
 
 	ctx.save = function() {
-		if(this._stack.length < 32)
-			this._stack.push( mat3.clone( this._matrix ) );
+		if(this._stack_size >= 32)
+			return;
+		var current_level = null;
+		if(this._stack_size == this._stack.length)
+		{
+			current_level = this._stack[ this._stack_size ] = {
+				matrix: mat3.create(),
+				fillColor: vec4.create(),
+				strokeColor: vec4.create(),
+				shadowColor: vec4.create(),
+				globalAlpha: 1,
+				font: "",
+				fontFamily: "",
+				fontSize: 14,
+				fontMode: "",
+				textAlign: ""
+			};
+		}
+		else
+			current_level = this._stack[ this._stack_size ];
+		this._stack_size++;
+
+		current_level.matrix.set( this._matrix );
+		current_level.fillColor.set( this._fillcolor );
+		current_level.strokeColor.set( this._strokecolor );
+		current_level.shadowColor.set( this._shadowcolor );
+		current_level.globalAlpha = this._globalAlpha;
+		current_level.font = this._font;
+		current_level.fontFamily = this._font_family;
+		current_level.fontSize = this._font_size;
+		current_level.fontMode = this._font_mode;
+		current_level.textAlign = this.textAlign;
 	}
 
 	ctx.restore = function() {
-		if(this._stack.length)
-			this._matrix.set( this._stack.pop() );
-		else
+		if(this._stack_size == 0)
+		{
 			mat3.identity( this._matrix );
+			global_angle = 0;
+			return;
+		}
+		
+		this._stack_size--;
+		var current_level = this._stack[ this._stack_size ];
+
+		this._matrix.set( current_level.matrix );
+		this._fillcolor.set( current_level.fillColor );
+		this._strokecolor.set( current_level.strokeColor );
+		this._shadowcolor.set( current_level.shadowColor );
+		this._globalAlpha = current_level.globalAlpha;
+		this._font = current_level.font;
+		this._font_family = current_level.fontFamily;
+		this._font_size = current_level.fontSize;
+		this._font_mode = current_level.fontMode;
+		this.textAlign = current_level.textAlign;
+
 		global_angle = Math.atan2( this._matrix[3], this._matrix[4] ); //use up vector
+
 		if(	stencil_enabled )
 		{
 			gl.enable( gl.STENCIL_TEST );
@@ -1042,6 +1091,7 @@ function enableWebGLCanvas( canvas, options )
 		num = Math.ceil(radius*2*this._matrix[0]+1);
 		if(num<1)
 			return;
+		num = Math.min(num, 1024); //clamp it or bad things can happend
 
 		start_ang = start_ang === undefined ? 0 : start_ang;
 		end_ang = end_ang === undefined ? Math.PI * 2 : end_ang;
@@ -1090,12 +1140,16 @@ function enableWebGLCanvas( canvas, options )
 	ctx.clearRect = function(x,y,w,h)
 	{
 		if(x != 0 || y != 0 || w != canvas.width || h != canvas.height )
+		{
+			gl.enable( gl.SCISSOR_TEST );
 			gl.scissor(x,y,w,h);
+		}
 
 		//gl.clearColor( 0.0,0.0,0.0,0.0 );
 		gl.clear( gl.COLOR_BUFFER_BIT );
 		var v = gl.viewport_data;
 		gl.scissor(v[0],v[1],v[2],v[3]);
+		gl.disable( gl.SCISSOR_TEST );
 	}
 
 	ctx.fillCircle = function(x,y,r)
@@ -1255,6 +1309,7 @@ function enableWebGLCanvas( canvas, options )
 		var spacing = point_size * info.spacing / info.char_size - 1 ;
 		var kernings = info.kernings;
 		var scale_factor = info.font_size / this._font_size;
+		var is_first_char = true;
 
 		var vertices_index = 0, coords_index = 0;
 		
@@ -1267,7 +1322,8 @@ function enableWebGLCanvas( canvas, options )
 				if(text.charCodeAt(i) == 10) //break line
 				{
 					x = 0;
-					y -= point_size;
+					y += point_size;
+					is_first_char = true;
 				}
 				else
 					x += point_size * 0.5;
@@ -1275,9 +1331,11 @@ function enableWebGLCanvas( canvas, options )
 			}
 
 			var kern = kernings[ text[i] ];
-			if(i == 0)
+			if(is_first_char)
+			{
 				x -= point_size * kern["nwidth"] * 0.25;
-
+				is_first_char = false;
+			}
 
 			points[vertices_index+0] = startx + x + point_size * 0.5;
 			points[vertices_index+1] = starty + y - point_size * 0.25;
