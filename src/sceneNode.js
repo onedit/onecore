@@ -679,7 +679,13 @@ SceneNode.prototype.setPropertyValueFromPath = function( path, value, offset )
 		{
 			case "matrix": target = this.transform; break;
 			case "position":
+            target = this.transform; 
+				varname = path[offset];
+				break;
 			case "rotation":
+			target = this.transform; 
+				varname = path[offset];
+				break;
 			case "x":
 			case "y":
 			case "z":
@@ -1197,7 +1203,7 @@ SceneNode.prototype.configure = function(info, components_aside)
 	LEvent.trigger(this,"configure",info);
 }
 
-//adds components according to a mesh
+///adds components according to a mesh
 //used mostly to addapt a node to a collada mesh info
 SceneNode.prototype.addMeshComponents = function( mesh_id, extra_info )
 {
@@ -1254,8 +1260,9 @@ SceneNode.prototype.addMeshComponents = function( mesh_id, extra_info )
 	//skinning
 	if(mesh && mesh.bones)
 	{
-		compo = new ONE.Components.SkinDeformer({ search_bones_in_parent: false }); //search_bones_in_parent is false because usually DAEs come that way
-		this.addComponent( compo );
+        var options = { search_bones_in_parent: mesh.search_bones_in_parent || false };
+		compo = new ONE.Components.SkinDeformer(options); //search_bones_in_parent is false because usually DAEs come that way		
+        this.addComponent( compo );
 	}
 
 	//morph targets
@@ -1264,8 +1271,8 @@ SceneNode.prototype.addMeshComponents = function( mesh_id, extra_info )
 		var compo = new ONE.Components.MorphDeformer( { morph_targets: mesh.morph_targets } );
 		this.addComponent( compo );
 	}
-
 }
+
 
 /**
 * Serializes this node by creating an object with all the info
