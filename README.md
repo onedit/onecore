@@ -34,8 +34,7 @@ Create the context
 ```js
 var player = new ONE.Player({
 	width:800, height:600,
-	resources: "resources/",
-	shaders: "data/shaders.xml"
+	resources: "resources/"
 });
 ```
 
