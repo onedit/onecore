@@ -46,7 +46,7 @@ var parserGLTF = {
 		}
 
 
-		var clean_filename = LS.RM.getFilename( filename );
+		var clean_filename = ONE.RM.getFilename( filename );
 		var extension = ONE.ResourcesManager.getExtension(filename)
 
     	var json = {};
@@ -70,7 +70,7 @@ var parserGLTF = {
 				buffer.data = _base64ToArrayBuffer( buffer.uri.substr(37) );
 				else
 				{
-				var file = LS.RM.getResource( buffer.uri );
+				var file = ONE.RM.getResource( buffer.uri );
 				buffer.data = file.data;
 				}
 
@@ -240,7 +240,7 @@ var parserGLTF = {
 
 		if(!json.url)
 			json.url = filename || "scene.glb";
-   		 var clean_filename = LS.RM.getFilename(json.filename)
+   		 var clean_filename = ONE.RM.getFilename(json.filename)
 		//Create a scene tree
 		var sceneTree = { 
 			object_class:"Scene", 
@@ -271,7 +271,7 @@ var parserGLTF = {
 				{
           var node = json.nodes[ skin.joints[j] ];
 					json.nodes[ skin.joints[j] ]._is_joint = true;
-         /* var t = new LS.Transform();
+         /* var t = new ONE.Transform();
           if(node.translation)
           	t.setPosition(node.translation);
           if(node.rotation)
@@ -408,7 +408,7 @@ var parserGLTF = {
 		for(var i in sceneTree.resources)
 		{
 			var res = sceneTree.resources[i];
-			var ext = LS.ResourcesManager.getBasename( i );
+			var ext = ONE.ResourcesManager.getBasename( i );
 			if(!ext)
 				console.warn("DAE contains resources without extension: " + i, res.constructor );
 			if(res.object_class == "Animation")
@@ -416,7 +416,7 @@ var parserGLTF = {
 		}
 	/*	if(nodes_info.length > 1) //multiple root nodes
 		{
-			root = new LS.SceneNode("root");
+			root = new ONE.SceneNode("root");
 			root.root = root;
 		}
 */	
@@ -455,7 +455,7 @@ var parserGLTF = {
       }*/
 		if(json.animations && json.animations.length)
 		{
-			if(!LS.Animation)
+			if(!ONE.Animation)
 				console.error("you must include rendeer-animation.js to allow animations");
 			else
 			{
@@ -467,13 +467,13 @@ var parserGLTF = {
 					if(animation)
 					{
             animation.uid = animation.id = json.filename.substr(0,json.filename.indexOf(".")) + "::" + animation.name;
-						//LS.Animations[ animation.id ] = animation;	
+						//ONE.Animations[ animation.id ] = animation;	
           //  sceneTree.root.animation = animation.id;
 
             var animations_name = "animations_" + json.filename.substr(0,json.filename.indexOf("."));
             sceneTree.resources[ animations_name ] = animation;
             sceneTree.root.animation = animations_name;
-             LS.RM.registerResource(animations_name, animation)
+             ONE.RM.registerResource(animations_name, animation)
 	
 					}
 				}
@@ -488,13 +488,13 @@ var parserGLTF = {
 		return sceneTree;
 	},
 
-	parseNode: function(node, index, json, renamed = null, bind_matrix = null)
+	parseNode: function(node, index, json, renamed, bind_matrix )
 	{
 		var info = json.nodes[ index ];
 
     if(info.skin==undefined)
     {
-      var mat = new LS.Transform();
+      var mat = new ONE.Transform();
       if(info.translation)
         mat.setPosition(info.translation);
       if(node.rotation)
@@ -505,7 +505,7 @@ var parserGLTF = {
      // info.bind_matrix = mat4.invert(mat4.create(),mat.getMatrix());
         
     }
-		node = node || new LS.SceneNode();
+		node = node || new ONE.SceneNode();
 		
 		//extract node info
 		for(var i in info)
@@ -638,7 +638,7 @@ var parserGLTF = {
 		return node;
 	},
 
-	parseMesh: function(index, json, parent = null)
+	parseMesh: function(index, json, parent )
 	{
 		var mesh_info = json.meshes[index];
 		var meshes_container = gl.meshes;
@@ -722,7 +722,7 @@ var parserGLTF = {
     if(mesh_info.bind_matrix)
       mesh.bind_matrix = mesh_info.bind_matrix;
     meshes_container[ mesh.name ] = mesh;
-    LS.RM.meshes[mesh.name] = mesh;
+    ONE.RM.meshes[mesh.name] = mesh;
 		return mesh;
 	},
 
@@ -1015,11 +1015,11 @@ var parserGLTF = {
 		else
       mat_name = json.filename.substr(0,json.filename.indexOf("."))+ "_"+mat_name.replace(/[^a-z0-9\.\-]/gi,"_") + ".json";
     
-		var material = LS.RM.getMaterial( mat_name );
+		var material = ONE.RM.getMaterial( mat_name );
 		if(material && (!this.overwrite_materials || material.from_filename == json.filename.substr(0,json.filename.indexOf("."))) )
 			return material;
 
-		material = new LS.StandardMaterial();
+		material = new ONE.StandardMaterial();
 		material.name = mat_name;
 		material.from_filename = json.filename.substr(0,json.filename.indexOf("."));
 		//material.shader_name = "phong";
@@ -1076,7 +1076,7 @@ var parserGLTF = {
 		if(info.emissiveFactor)
 			material.emissive = info.emissiveFactor;
 
-		LS.RM.materials[ material.name ] = material;
+		ONE.RM.materials[ material.name ] = material;
 		this.gltf_materials[ material.name ] = material;
 
 		return material;
@@ -1210,13 +1210,13 @@ var parserGLTF = {
 	parseAnimation: function(index, json, nodes_by_id )
 	{
 		var info = json.animations[index];
-		var animation = new LS.Animation();
+		var animation = new ONE.Animation();
 		animation.name = info.name || "anim_" + index;
 		var duration = 0;
 
 		for(var i = 0; i < info.channels.length; ++i)
 		{
-			var track = new LS.Animation.Track();
+			var track = new ONE.Animation.Track();
 			var channel = info.channels[i];
 			var sampler = info.samplers[channel.sampler];
 
@@ -1231,9 +1231,9 @@ var parserGLTF = {
 			var timestamps = this.parseAccessor( sampler.input, json );
 			var keyframedata = this.parseAccessor( sampler.output, json );
 			var type = json.accessors[ sampler.output ].type;
-			var type_enum = LS.TYPES[type];
-			if( type_enum == LS.TYPES["VEC4"] && track.target_property == "rotation")
-				type_enum = LS.TYPES["QUAT"];
+			var type_enum = ONE.TYPES[type];
+			if( type_enum == ONE.TYPES["VEC4"] && track.target_property == "rotation")
+				type_enum = ONE.TYPES["QUAT"];
 			track.type = type_enum;
 			var num_components = this.numComponents[ type ];
 
@@ -1248,7 +1248,7 @@ var parserGLTF = {
 			{
 				keyframes[j*(1+num_components)] = timestamps[j];
 				var value = keyframedata.subarray(j*num_components,j*num_components+num_components);
-				//if(type_enum == LS.QUAT)
+				//if(type_enum == ONE.QUAT)
 				//	quat.identity(value,value);
 				keyframes.set( value, j*(1+num_components)+1 );
 			}
@@ -1371,10 +1371,10 @@ function _base64ToArrayBuffer(base64) {
 if(typeof(DracoDecoderModule) != "undefined")
 	parserGLTF.installDracoModule(parserGLTF.onReady);
 
-LS.Formats.addSupportedFormat( "gltf", parserGLTF );
-LS.Formats.addSupportedFormat( "glb", parserGLTF );
+ONE.Formats.addSupportedFormat( "gltf", parserGLTF );
+ONE.Formats.addSupportedFormat( "glb", parserGLTF );
 
-LS.SceneNode.prototype.setPropertyValueFromPath = function( path, value, offset )
+ONE.SceneNode.prototype.setPropertyValueFromPath = function( path, value, offset )
 {
 	offset = offset || 0;
 

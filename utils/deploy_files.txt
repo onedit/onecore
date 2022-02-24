@@ -132,6 +132,7 @@
 ../src/parsers/parserBVH.js
 ../src/parsers/parserASE.js
 ../src/parsers/parserJSMESH.js
+../src/parsers/parserGLTF.js
 
 ../src/utils.js
 ../src/outro.js
